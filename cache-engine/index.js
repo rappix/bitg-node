@@ -1,8 +1,8 @@
 // Bitgreen block crawler
-// This program will listen for new blocks and store 
-// them in a local Postgresql database. 
+// This program will listen for new blocks and store
+// them in a local Postgresql database.
 
-// import required dependancies
+// import required dependencies
 const { processBlock, initApi} = require("./src/methods")
 
 require('dotenv').config()
@@ -18,7 +18,7 @@ async function main () {
         api.rpc.system.version()
     ]);
 
-    // log message to console 
+    // log message to console
     console.log(`You are connected to chain ${chain} using ${nodeName} v${nodeVersion}`);
 
     // We only display a couple, then unsubscribe

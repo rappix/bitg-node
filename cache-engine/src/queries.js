@@ -1,12 +1,51 @@
 // Bitgreen node infrastructure
-// This file contains the block storage functions, the API endpoint functions and 
-// the queries used to serve them. 
+// This file contains the block storage functions, the API endpoint functions and
+// the queries used to serve them.
 
 const Pool = require('pg').Pool
 const pool = new Pool()
 
 // *** "VCU" Pallet Section ***
 // This section contains functions relating the "VCU" Pallet
+
+// save VCU Project to DB
+const storeVcuProject = (request, response) => {
+	let { block_number, hash, project_id, originator, name, description, registry_name, registry_id, registry_summary, signer, total_supply, minted, retired, unit_price, created_at } = request
+	created_at = new Date(parseInt(created_at)).toISOString()
+
+	pool.query('INSERT INTO vcu_projects ("block_number", "hash", "project_id", "originator", "name", "description", "registry_name", "registry_id", "registry_summary", "signer", "total_supply", "minted", "retired", "unit_price", "created_at") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)',
+		[block_number, hash, project_id, originator, name, description, registry_name, registry_id, registry_summary, signer, total_supply, minted, retired, unit_price, created_at], (error, results) => {
+			if (error) {
+				// console.log(error.message)
+			}
+			// response.status(201).send(`User added with ID: ${result.insertId}`)
+		})
+}
+
+const approveVcuProject = (request, response) => {
+	let { project_id, is_approved, updated_at } = request
+	updated_at = new Date(parseInt(updated_at)).toISOString()
+
+	pool.query('UPDATE vcu_projects SET approved = $2, updated_at = $3 WHERE project_id = $1',
+		[project_id, is_approved, updated_at], (error, results) => {
+			if (error) {
+				console.log(error.message)
+			}
+		})
+}
+
+// store assigned asset_id to project
+const connectAssetAndProject = (request, response) => {
+	let { project_id, asset_id, updated_at } = request
+	updated_at = new Date(parseInt(updated_at)).toISOString()
+
+	pool.query('UPDATE vcu_projects SET asset_id = $2, updated_at = $3 WHERE project_id = $1',
+		[project_id, asset_id, updated_at], (error, results) => {
+			if (error) {
+				console.log(error.message)
+			}
+		})
+}
 
 // save authorized vcu account to DB
 const storeVcuAuthorizedAccount = (request, response) => {
@@ -521,7 +560,7 @@ getImpactActionsOracles = (request, response) => {
         })
 }
 
-// get Impact Action Proxies 
+// get Impact Action Proxies
 getImpactActionsProxies = (request, response) => {
     pool.query('SELECT * FROM impact_actions_proxies ORDER BY date,id DESC',
         [], (error, results) => {
@@ -693,8 +732,7 @@ const getTransaction = (request, response) => {
         })
 }
 
-
-// export all methods so they can be called externally 
+// export all methods so they can be called externally
 // (from index.js for exmaple)
 module.exports = {
     storeBlock,
@@ -721,6 +759,10 @@ module.exports = {
     getImpactActionsProxies,
 
     /* vcu */
+	storeVcuProject,
+	approveVcuProject,
+	connectAssetAndProject,
+
     storeVcuAuthorizedAccount,
     getVcuAuthorizedAccounts,
     destroyVcuAuthorizedAccount,

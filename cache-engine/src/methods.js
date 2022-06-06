@@ -2,6 +2,7 @@ const db = require("./queries");
 const {WsProvider, ApiPromise} = require("@polkadot/api");
 const types = require("../assets/types.json");
 const rpc = require("../assets/rpc.json");
+const { hexToString, hexToNumber} = require('@polkadot/util');
 
 require('dotenv').config()
 
@@ -39,7 +40,7 @@ async function processBlock(api, block_number, analyze_only = false) {
         const section = ex.method.section.toString()
         const isSigned = ex.isSigned
         const txHash = ex.hash.toHex()
-        let recipient, amount, extrinsic_success = false
+        let recipient, amount, extrinsic_success = false, new_asset_id = undefined
 
         let signedByAddress = null
         if (isSigned) {
@@ -64,6 +65,15 @@ async function processBlock(api, block_number, analyze_only = false) {
             )
             .map(({event}) => {
                 extrinsic_success = !!api.events.system.ExtrinsicSuccess.is(event);
+
+				// extract asset_id and assign it to a project
+				if(section === 'vcu' && method === 'mint' && event.section === 'assets' && event.method === 'ForceCreated') {
+					event.data.map((arg, d) => {
+						if (d === 0) {
+							new_asset_id = arg.toString()
+						}
+					});
+				}
             });
 
         // Start processing extrinsic and it's data
@@ -74,13 +84,96 @@ async function processBlock(api, block_number, analyze_only = false) {
             )
             .map(({event}) => {
                 if (extrinsic_success) {
-                    // console.log('Transaction Hash: ' + txHash);
+					let event_section = event.section;
+					let event_method = event.method;
+					// console.log('Transaction Hash: ' + txHash);
+					// console.log(event.section + ': ' + event.method)
 
                     if (!analyze_only) {
-                        if (section === 'balances' && (method === 'transferKeepAlive' || method === 'transfer')) {
-                            let event_section = event.section;
-                            let event_method = event.method;
+                        if (event_section === 'vcu') {
+                            if(event_method === 'ProjectCreated') {
+                                let project_id, details
 
+								event.data.map((arg, d) => {
+									if (d === 0) {
+										project_id = arg.toString()
+									} else if (d === 1) {
+										details = arg.toJSON();
+									}
+								});
+
+								details['batches'].map((batch, d) => {
+									// console.log(batch)
+									// TODO: Save to db
+								})
+
+								// console.log(hexToString(details['registryDetails']['name']))
+								db.storeVcuProject({
+									block_number: block_number,
+									hash: txHash,
+									project_id: project_id,
+									originator: signedByAddress,
+									name: hexToString(details['name']),
+									description: hexToString(details['description']),
+									registry_name: hexToString(details['registryDetails']['name']),
+									registry_id: hexToString(details['registryDetails']['id']),
+									registry_summary: hexToString(details['registryDetails']['summary']),
+									signer: signedByAddress,
+
+									total_supply: details['totalSupply'],
+									minted: details['minted'],
+									retired: details['retired'],
+
+									unit_price: details['unitPrice'],
+
+									created_at: current_time
+								})
+                            }
+
+							if(event_method === 'ProjectApproved') {
+								let project_id, is_approved;
+
+								ex.args.map((arg, d) => {
+									// console.log(arg.toHuman())
+									if (d === 0) {
+										project_id = arg.toString()
+									} else if (d === 1) {
+										is_approved = arg.toString() === 'true';
+									}
+								});
+
+								db.approveVcuProject({
+									project_id: project_id,
+									is_approved: is_approved,
+									updated_at: current_time
+								});
+							}
+
+							if(event_method === 'VCUMinted') {
+								// console.log(api.events.vcu.VCUMinted.is(event))
+								let project_id, account, amount;
+
+								event.data.map((arg, d) => {
+									if (d === 0) {
+										project_id = arg.toString()
+									} else if (d === 1) {
+										account = arg.toString();
+									} else if (d === 2) {
+										amount = arg.toString();
+									}
+								});
+
+								if(new_asset_id) {
+									// connect asset id with vcu project
+									db.connectAssetAndProject({
+										project_id: project_id,
+										asset_id: new_asset_id,
+										updated_at: current_time
+									});
+								}
+							}
+                        }
+                        if (section === 'balances' && (method === 'transferKeepAlive' || method === 'transfer')) {
                             if(event_section === 'balances' && event_method === 'Transfer') {
                                 // TODO: check why api.rpc.eth is empty
                                 // console.log(api.rpc.eth.getTransactionReceipt(txHash));
